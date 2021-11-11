@@ -9,15 +9,14 @@ import (
 )
 
 func TestMain(t *testing.T) {
-	gcpLocation := "europe-west2-a"
 	cwd, _ := os.Getwd()
 	integration.ProgramTest(t, &integration.ProgramTestOptions{
 		Quick:       true,
 		SkipRefresh: true,
 		Dir:         path.Join(cwd),
 		Config: map[string]string{
-			"gcp:zone":    gcpLocation,
-			"gcp:project": "fluent-webbing-218616",
+			"gcp:zone":    os.Getenv("GCP_ZONE"),
+			"gcp:project": os.Getenv("GCP_PROJECT"),
 		},
 	})
 }
