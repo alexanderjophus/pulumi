@@ -102,6 +102,7 @@ github.com/aws/aws-sdk-go/service/sso/ssoiface
 github.com/aws/aws-sdk-go/service/sts
 github.com/aws/aws-sdk-go/service/sts/stsiface
 # github.com/blang/semver v3.5.1+incompatible
+## explicit
 github.com/blang/semver
 # github.com/cheggaaa/pb v1.0.18
 github.com/cheggaaa/pb

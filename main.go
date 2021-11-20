@@ -8,6 +8,7 @@ import (
 	"github.com/pulumi/pulumi-kubernetes/sdk/v3/go/kubernetes/helm/v3"
 	metav1 "github.com/pulumi/pulumi-kubernetes/sdk/v3/go/kubernetes/meta/v1"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+	argoproj "github.com/trelore/pulumi/crds/argoproj/v1alpha1"
 )
 
 func main() {
@@ -52,8 +53,11 @@ func main() {
 			return err
 		}
 
-		_, err = createMonitoring(ctx, k8sProvider)
-		if err != nil {
+		if err = createMonitoring(ctx, k8sProvider); err != nil {
+			return err
+		}
+
+		if err = createArgo(ctx, k8sProvider); err != nil {
 			return err
 		}
 
@@ -61,38 +65,88 @@ func main() {
 	})
 }
 
-type monitoring struct {
-	namespace *corev1.Namespace
-	grafana   *helm.Chart
-}
-
-func createMonitoring(ctx *pulumi.Context, k8sProvider pulumi.ProviderResource) (*monitoring, error) {
-	monitoringNS := "monitoring"
+func createMonitoring(ctx *pulumi.Context, k8sProvider pulumi.ProviderResource) error {
 	ns, err := corev1.NewNamespace(ctx, "monitoring", &corev1.NamespaceArgs{
 		Metadata: &metav1.ObjectMetaArgs{
-			Name: pulumi.String(monitoringNS),
+			Name: pulumi.String("monitoring"),
 		},
 	}, pulumi.Provider(k8sProvider))
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	grafana, err := helm.NewChart(ctx, "grafana", helm.ChartArgs{
-		Chart:     pulumi.String("grafana"),
-		Version:   pulumi.String("6.17.5"),
-		Namespace: pulumi.String(monitoringNS),
+	_, err = helm.NewChart(ctx, "loki-stack", helm.ChartArgs{
+		Chart:     pulumi.String("loki-stack"),
+		Version:   pulumi.String("2.5.0"),
+		Namespace: ns.Metadata.Name().Elem(),
 		FetchArgs: helm.FetchArgs{
 			Repo: pulumi.String("https://grafana.github.io/helm-charts"),
 		},
+		Values: pulumi.Map{
+			"loki": pulumi.Map{
+				"enabled": pulumi.Bool(true),
+			},
+			"grafana": pulumi.Map{
+				"enabled": pulumi.Bool(true),
+			},
+			"prometheus": pulumi.Map{
+				"enabled": pulumi.Bool(true),
+			},
+		},
 	}, pulumi.Provider(k8sProvider))
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return &monitoring{
-		namespace: ns,
-		grafana:   grafana,
-	}, nil
+	return nil
+}
+
+func createArgo(ctx *pulumi.Context, k8sProvider pulumi.ProviderResource) error {
+	ns, err := corev1.NewNamespace(ctx, "argo", &corev1.NamespaceArgs{
+		Metadata: &metav1.ObjectMetaArgs{
+			Name: pulumi.String("argo"),
+		},
+	}, pulumi.Provider(k8sProvider))
+	if err != nil {
+		return err
+	}
+
+	chart, err := helm.NewChart(ctx, "argo", helm.ChartArgs{
+		Chart:     pulumi.String("argo-cd"),
+		Version:   pulumi.String("3.26.9"),
+		Namespace: ns.Metadata.Name().Elem(),
+		FetchArgs: helm.FetchArgs{
+			Repo: pulumi.String("https://argoproj.github.io/argo-helm"),
+		},
+	}, pulumi.Provider(k8sProvider))
+	if err != nil {
+		return err
+	}
+
+	argoproj.NewApplication(ctx, "application", &argoproj.ApplicationArgs{
+		Metadata: metav1.ObjectMetaArgs{
+			Namespace: ns.Metadata.Name().Elem(),
+		},
+		Spec: argoproj.ApplicationSpecArgs{
+			Destination: argoproj.ApplicationSpecDestinationArgs{
+				Namespace: ns.Metadata.Name().Elem(),
+				Server:    pulumi.String("https://kubernetes.default.svc"),
+			},
+			Source: argoproj.ApplicationSpecSourceArgs{
+				RepoURL:        pulumi.String("https://github.com/trelore/iris-classification"),
+				Path:           pulumi.String("kustomize"),
+				TargetRevision: pulumi.String("HEAD"),
+			},
+			SyncPolicy: argoproj.ApplicationSpecSyncPolicyArgs{
+				Automated: argoproj.ApplicationSpecSyncPolicyAutomatedArgs{
+					Prune: pulumi.Bool(true),
+				},
+			},
+			Project: pulumi.String("default"),
+		},
+	}, pulumi.Provider(k8sProvider), pulumi.DependsOn([]pulumi.Resource{chart}))
+
+	return nil
 }
 
 func generateKubeconfig(clusterEndpoint pulumi.StringOutput, clusterName pulumi.StringOutput,

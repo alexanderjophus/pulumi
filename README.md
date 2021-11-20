@@ -54,9 +54,21 @@ go test -timeout 600s
 
 I set a timeout of 600s as we are creating a cluster, deploying to it, then tearing it down - this took about 9 minutes for me.
 
+## Notes
+
+- Seems like it needs to be run at least twice to work, the crd for argo application doesn't want to wait for the helm chart to deploy the application crds.
+
 ## Future
 
 In the future I'd like to expand this project, I have the following questions:
 
-- Can I set up a docker registry
-- Can I set up Argo to point to my [iris](https://github.com/trelore/iris-classification) project
+- [x] Can I set up Argo to point to my [iris](https://github.com/trelore/iris-classification) project
+  - Motivation: I want to deploy services in a declarative way
+- [x] Can I deploy other monitoring tools?
+  - Motivation: I want to monitor my application as if it were a prod app
+- [ ] Add API gateway
+  - Motivation: I want to try it
+- [ ] Can I use CRDS for Argo/Traefik to avoid manual configuration?
+  - Motivation: No manual steps!
+- [x] Can I set the NS and use the returned ns later?
+  - Motivation: Neater codebase?
